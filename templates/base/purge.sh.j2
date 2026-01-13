@@ -1,0 +1,38 @@
+# --- TASK: PURGE (Self-Destruction) ---
+log "Nexus: PURGE SIGNAL RECEIVED. Decommissioning this host from the fleet"
+
+# 1. Eliminar persistencia (Systemd/Cron)
+if [ -d /run/systemd/system ]; then
+    systemctl stop nexus.timer >/dev/null 2>&1
+    systemctl disable nexus.timer >/dev/null 2>&1
+    rm -f /etc/systemd/system/nexus.service /etc/systemd/system/nexus.timer
+    systemctl daemon-reload >/dev/null 2>&1
+fi
+[ -f /etc/cron.d/nexus ] && rm -f /etc/cron.d/nexus
+
+# 2. Eliminar binario
+rm -f /usr/local/sbin/nexus-call
+
+# 3. Preparar mensaje final y enviar reporte ANTES de borrar la llave
+log "Nexus: PURGE COMPLETED. Agent removed."
+log "--- NEXUS FINISHED: $(date) ---"
+
+# Usamos una forma más robusta de leer el log para el JSON
+FINAL_LOG_CONTENT=$(cat "$LOG")
+JSON_DATA=$(python3 -c "import json, sys; print(json.dumps({
+    'hostname': '$__HOSTNAME',
+    'machine_id': '$__NEXUS_MACHINE_ID',
+    'fingerprint': '$__NEXUS_FINGERPRINT',
+    'ip': '$__IP',
+    'mac': '$__MAC',
+    'log': sys.argv[1]
+}))" "$FINAL_LOG_CONTENT")
+
+OUT=$(curl -s -X POST \
+     -H "Content-Type: application/json" \
+     -H "X-Nexus-Key: $__NEXUS_KEY" \
+     -d "$JSON_DATA" http://{{ node.registrator_server }}:8000/record)
+
+# 4. Borrado físico final
+rm -rf /etc/nexus/
+exit 0

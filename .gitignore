@@ -1,0 +1,28 @@
+# Ignorar venn
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.python-version
+uv.lock
+.vs-code
+.zed
+
+# Ignorar datos internos
+app/main-*.py
+data/registrator.db
+output/*
+!output/.gitkeep
+
+# Ignorar datos 
+.vault_pass
+.env
+
+# Ignorar todos los archivos de configuración YAML
+*.yml
+*.yaml
+
+# Pero NO ignores los archivos de ejemplo/plantilla
+!*.yml.template
+!*.yaml.template
+

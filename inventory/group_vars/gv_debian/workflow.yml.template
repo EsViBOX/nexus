@@ -1,0 +1,14 @@
+# inventory/group_vars/gv_debian/workflow.yml
+nexus_workflow:
+  - base/header
+  - tasks/00-persistence
+  - tasks/01-hosts
+  - tasks/02-sshd
+  - tasks/03-password
+  - tasks/04-keys
+  - tasks/05-auth
+  - tasks/06-scripts
+  - tasks/07-skels
+  - tasks/08-ssl
+  - tasks/99-clean
+  - base/footer

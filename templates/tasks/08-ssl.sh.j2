@@ -1,0 +1,79 @@
+# --- TASK: 08-SSL (Advanced Multi-Cert Sync) ---
+log ".. task: 08-ssl (managing SSL certificates)"
+
+{% if node.cert_manifest %}
+RESTART_LIST=""
+
+{% for cert in node.cert_manifest %}
+# --- Dominio: {{ cert.domain }} ---
+DEST="{{ cert.dest_path }}"
+
+{% if cert.remove %}
+if [ -d "$DEST" ]; then
+    rm -rf "$DEST"
+    log ".... {{ cert.domain }}: removed (remove: true)"
+fi
+{% else %}
+[ ! -d "$DEST" ] && mkdir -p "$DEST"
+chmod 750 "$DEST"
+
+CERT_CHANGED=false
+{% for file in cert.files %}
+TARGET_FILE="$DEST/{{ file.name }}"
+NEED_FILE=false
+
+{% if cert.override %}
+NEED_FILE=true
+{% else %}
+if [ ! -f "$TARGET_FILE" ] || [ "$(md5sum "$TARGET_FILE" | awk '{print $1}')" != "{{ file.hash }}" ]; then
+    NEED_FILE=true
+fi
+{% endif %}
+
+if [ "$NEED_FILE" = true ]; then
+    log "...... {{ cert.domain }}: updating {{ file.name }}"
+    curl -s -H "X-Nexus-Key: $__NEXUS_KEY" -o "$TARGET_FILE" "http://$__NEXUS_ENDPOINT/certs/{{ cert.domain }}/{{ file.name }}"
+    chmod 600 "$TARGET_FILE"
+    CERT_CHANGED=true
+else
+    log ".... {{ cert.domain }}/{{ file.name }}: up to date (hash match) "
+fi
+{% endfor %}
+
+# --- PROCESAMIENTO POST-DESCARGA ---
+if [ "$CERT_CHANGED" = true ]; then
+    : # Comando nulo para evitar bloque vacío
+    {% if cert.generate_combined %}
+    log "...... {{ cert.domain }}: generating combined pem"
+    cat "$DEST/fullchain.pem" "$DEST/privkey.pem" > "$DEST/{{ cert.domain }}.combined.pem"
+    chmod 600 "$DEST/{{ cert.domain }}.combined.pem"
+    {% endif %}
+
+    {% if cert.generate_p12 %}
+    log "...... {{ cert.domain }}: generating pkcs12"
+    openssl pkcs12 -export -out "$DEST/{{ cert.domain }}.p12" \
+        -inkey "$DEST/privkey.pem" -in "$DEST/cert.pem" \
+        -certfile "$DEST/chain.pem" \
+        -password pass:{{ node.vault_ssl.pkcs12_password | default('nexus') }}
+    chmod 600 "$DEST/{{ cert.domain }}.p12"
+    {% endif %}
+
+    {% for svc in cert.restart_services %}
+    RESTART_LIST="$RESTART_LIST {{ svc }}"
+    {% endfor %}
+fi
+{% endif %}
+{% endfor %}
+
+# --- REINICIO DE SERVICIOS ACUMULADOS ---
+if [ -n "$(echo \"$RESTART_LIST\" | tr -d '[:space:]')" ]; then
+    UNIQUE_SVC=$(echo "$RESTART_LIST" | tr ' ' '\n' | sort -u)
+    for S in $UNIQUE_SVC; do
+        [ -z "$S" ] && continue
+        log ".... reloading service: $S"
+        systemctl reload $S 2>/dev/null || service $S reload 2>/dev/null
+    done
+fi
+{% else %}
+log ".... skipping ssl: no certificates defined"
+{% endif %}

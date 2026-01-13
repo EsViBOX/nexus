@@ -1,0 +1,11 @@
+# inventory/group_vars/gv_synology/workflow.yml
+nexus_workflow:
+  - base/header
+  - tasks/00-persistence
+  - tasks/01-hosts
+  - tasks/03-password
+  - tasks/06-scripts
+  - tasks/07-skels
+  - tasks/08-ssl
+  - tasks/99-clean
+  - base/footer

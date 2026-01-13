@@ -1,0 +1,12 @@
+# inventory/host_vars/test-vm.yml
+
+# Forzar una nueva huella digital (Hardware Change)
+nexus_force_enroll: false
+
+# Expulsar máquina y borrar rastro (Decommissioning)
+nexus_purge: false
+
+# Sobrescribir scripts solo para esta máquina
+nexus_scripts:
+  - name: cleanmem.sh
+    override: true

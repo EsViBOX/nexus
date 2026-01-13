@@ -1,0 +1,14 @@
+# inventory/group_vars/all/vault.yml
+vault_users:
+  root:
+    password: "$6$rounds=656000$salt$encrypted_hash"
+    priv_key: |
+      -----BEGIN RSA PRIVATE KEY-----
+      ...
+    pub_key: "ssh-rsa AAAAB3..."
+  jdoe:
+    password: "..."
+    pub_key: "..."
+
+vault_ssl:
+  pkcs12_password: "clave-para-p12"

@@ -1,0 +1,17 @@
+# inventory/hosts.yml
+all:
+  children:
+    gv_debian:
+      hosts:
+        server-prod-01:
+          nexus_id: "id-unico-de-linux-1" # Contenido de /etc/machine-id
+          node_ip: "192.168.1.10"
+        server-prod-02:
+          nexus_id: "id-unico-de-linux-2"
+          node_ip: "192.168.1.11"
+
+    gv_synology:
+      hosts:
+        nas-backup:
+          nexus_id: "id-unico-synology-1"
+          node_ip: "192.168.1.20"

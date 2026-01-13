@@ -1,0 +1,35 @@
+# --- TASK: 01-HOSTS ---
+log ".. task: 01-host (configuring /etc/hosts)"
+
+# Limpieza del archivo hasta el marcador
+sed -i '/;;;/,$d' /etc/hosts
+
+{% if node.hostname in ['synology', 'synology-litos'] %}
+cat << EOF >> /etc/hosts
+;;; Changes from this line can be modified.
+127.0.0.1       localhost
+::1             localhost
+0.0.0.0         DiskStation
+{{ node.registrator_ip | default('172.19.101.60') }}      registrator registrator.{{ node.domain }}
+EOF
+{% else %}
+cat << EOF >> /etc/hosts
+;;; Changes from this line can be modified.
+127.0.0.1   localhost.localdomain  localhost
+::1         ip6-localhost  ip6-loopback
+fe00::0     ip6-localnet
+ff00::0     ip6-mcastprefix
+ff02::1     ip6-allnodes
+ff02::2     ip6-allrouters
+{{ node.registrator_ip | default('172.19.101.60') }}  registrator registrator.{{ node.domain }}
+EOF
+{% endif %}
+
+# Escritura de la IP del nodo
+{% if node.hostname == 'proxmox' %}
+echo "{{ node.node_ip }}  {{ node.hostname }}.{{ node.domain }}  {{ node.hostname }}  pvelocalhost" >> /etc/hosts
+{% else %}
+echo "127.0.0.1  {{ node.hostname }}.{{ node.domain }}  {{ node.hostname }}" >> /etc/hosts
+{% endif %}
+
+log ".... /etc/hosts updated"

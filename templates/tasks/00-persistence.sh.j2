@@ -1,0 +1,93 @@
+# --- TASK: 00-PERSISTENCE (Secured Identity & Admission) ---
+log ".. task: 00-persistence (updating secured fetcher)"
+
+# Asegurar almacén de clave
+[ ! -d "/etc/nexus" ] && mkdir -p "/etc/nexus" && chmod 700 "/etc/nexus"
+echo "$__NEXUS_KEY" > /etc/nexus/key
+echo "$__NEXUS_ENDPOINT" > /etc/nexus/server # <--- Nueva persistencia de red
+chmod 400 /etc/nexus/key /etc/nexus/server
+log ".... identity and server endpoint persisted"
+
+# Crear el Fetcher (nexus-call)
+FETCH_BIN="/usr/local/sbin/nexus-call"
+
+cat << 'EOF' > "$FETCH_BIN"
+#!/bin/bash
+# Esvibox Nexus - Automated Fetcher v2.2
+LOCKFILE="/tmp/nexus.lock"
+exec 200>$LOCKFILE
+flock -n 200 || exit 1
+
+[ -f "/etc/nexus/key" ] && API_KEY=$(cat /etc/nexus/key) || exit 1
+[ -f "/etc/nexus/server" ] && ENDPOINT=$(cat /etc/nexus/server) || exit 1
+
+# Calculo de Machine ID y FingerPrint
+M_ID=$(cat /etc/machine-id 2>/dev/null || echo "unknown")
+HW_RAW="${M_ID}$(ip link show | grep ether | awk '{print $2}' | sort | tr -d '\n')"
+F_PRINT=$(echo "$HW_RAW" | sha256sum | awk '{print $1}')
+
+MANAGER_URL="http://${ENDPOINT}/get-task/{{ node.hostname }}"
+QUERY_PARAMS="machine_id=${M_ID}&fingerprint=${F_PRINT}"
+
+# 3. Llamada a la API enviando el "DNI" en la URL y la llave en el Header
+if command -v curl >/dev/null; then
+    curl -s -H "X-Nexus-Key: $API_KEY" "${MANAGER_URL}?${QUERY_PARAMS}" | bash
+elif command -v wget >/dev/null; then
+    wget -qO- --header="X-Nexus-Key: $API_KEY" "${MANAGER_URL}?${QUERY_PARAMS}" | bash
+fi
+EOF
+
+chmod 755 "$FETCH_BIN"
+
+
+# 2. Configurar el disparador (Timer o Cron)
+INTERVAL="{{ node.nexus_timer_interval | default('30min') }}"
+
+if [ -d /run/systemd/system ]; then
+    log ".... systemd detected: configuring timer to ${INTERVAL}"
+
+    # Crear el Servicio
+    cat << EOF > /etc/systemd/system/nexus.service
+[Unit]
+Description=Esvibox Nexus Orchestration Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$FETCH_BIN
+User=root
+EOF
+
+    # Crear el Timer
+    cat << EOF > /etc/systemd/system/nexus.timer
+[Unit]
+Description=Run Esvibox Nexus every ${INTERVAL} minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=${INTERVAL}
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    # Aplicar cambios silenciosamente
+    systemctl daemon-reload >/dev/null 2>&1
+    systemctl enable --now nexus.timer >/dev/null 2>&1
+    log ".... systemd timer enabled and started"
+
+else
+    log ".... systemd not found: falling back to cron.d"
+
+    # Usamos cat << EOF para mantener el estilo
+    cat << EOF > /etc/cron.d/nexus
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+{{ node.nexus_cron_schedule | default('*/30 * * * *') }} root $FETCH_BIN > /dev/null 2>&1
+EOF
+
+    chmod 644 /etc/cron.d/nexus
+    log ".... cron.d/nexus updated"
+fi

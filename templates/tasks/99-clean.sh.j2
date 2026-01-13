@@ -1,0 +1,9 @@
+# --- TASK: 99-CLEAN ---
+log ".. task: 99-clean (cleanup phase)"
+
+# Eliminar archivos temporales de Nexus
+[ -f /tmp/nexus.xml ] && rm -f /tmp/nexus.xml
+[ -f /tmp/*.tgz ] && rm -f /tmp/*.tgz
+
+log ".... temporary files removed"
+log "Nexus: All configuration tasks completed"

@@ -1,0 +1,86 @@
+#!/bin/bash
+# =================================================================
+# NEXUS - Host: {{ node.hostname }}
+# =================================================================
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Nexus Error: This script must be run as root"
+    exit 1
+fi
+
+# --- 1. DEFINICIÓN DE LOG (SIEMPRE PRIMERO) ---
+LOG="/var/log/nexus.log"
+> $LOG
+
+log() {
+    # %F = YYYY-MM-DD
+    # %T = HH:MM:SS
+    # %3N = Primeros 3 dígitos de los nanosegundos (milisegundos)
+    echo "$(date +"%F %T.%3N") > $1" | tee -a $LOG
+}
+log "--- NEXUS START $(date) ---"
+
+# --- SEGURIDAD: CARGA Y DESOFUSCACIÓN DE API KEY ---
+log "Nexus: Security key"
+NEXUS_KEY_FILE="/etc/nexus/key"
+if [ -f "$NEXUS_KEY_FILE" ]; then
+    # Prioridad: Clave guardada en el sistema
+    export __NEXUS_KEY=$(cat "$NEXUS_KEY_FILE")
+    log ".... Security: Identity loaded"
+else
+    # Fallback: Desofuscamos la clave recibida en tránsito
+    # Invertimos con 'rev' y decodificamos con 'base64'
+    __SCRAMBLED="{{ node.nexus_api_key_scrambled }}"
+    export __NEXUS_KEY=$(echo "$__SCRAMBLED" | rev | base64 -d)
+    log ".... Key: descrambled from transit"
+fi
+
+
+# --- NETWORK: MANAGER ENDPOINT INITIALIZATION ---
+NEXUS_SERVER_FILE="/etc/nexus/server"
+
+if [ -f "$NEXUS_SERVER_FILE" ]; then
+    # Leer servidor desde el almacenamiento local
+    export __NEXUS_ENDPOINT=$(cat "$NEXUS_SERVER_FILE")
+else
+    # Fallback: Inyección desde el inventario (primera ejecución)
+    # Combinamos server y port desde el YAML
+    export __NEXUS_ENDPOINT="{{ node.registrator_server }}:{{ node.registrator_port | default(8000) }}"
+fi
+
+log ".... Network: Endpoint set to $__NEXUS_ENDPOINT"
+
+# --- CONSTANTES ---
+export __HOSTNAME="{{ node.hostname }}"
+export __DOMAIN="{{ node.domain }}"
+export __REGISTER_IP="{{ node.registrator_ip | default('172.19.101.71') }}"
+export __SYSTEM="{{ node.system_type }}"
+
+# --- RUTAS DINÁMICAS (Inyectadas por Nexus) ---
+export __SSHD_CONFIG="{{ node.sshd_config_path | default('/etc/ssh/sshd_config') }}"
+export __HOSTSFILE="{{ node.hosts_file_path | default('/etc/hosts') }}"
+export __SCRIPT_PATH="{{ node.script_bin_path | default('/usr/local/sbin') }}"
+export __SSL_PATH="{{ node.ssl_base_path | default('/etc/ssl/esvibox') }}"
+
+# --- DETECCIÓN DE ENTORNO ---
+# Detectamos IP y MAC una sola vez para usarlas en todo el script
+export __IFACE=$(ip route | grep default | awk '{print $5}' | head -n 1)
+export __IP=$(ip addr show dev $__IFACE | grep inet | grep -v inet6 | head -n 1 | awk '{print $2}' | awk -F "/" '{print $1}')
+export __MAC=$(ip addr show dev $__IFACE | grep link | grep -v inet6 | head -n 1 | awk '{print $2}')
+
+# Machine ID: Identificador inmutable de la instalación del SO
+export __NEXUS_MACHINE_ID=$(cat /etc/machine-id 2>/dev/null || echo "unknown")
+
+# Generar Huella (Fingerprint): Combinación de Machine ID + MACs del sistema
+# Esto crea una firma que cambia si la máquina es clonada (nueva MAC)
+_RAW_HW="${__NEXUS_MACHINE_ID}$(ip link show | grep ether | awk '{print $2}' | sort | tr -d '\n')"
+export __NEXUS_FINGERPRINT=$(echo "$_RAW_HW" | sha256sum | awk '{print $1}')
+
+# --- VISIBILIDAD INICIAL ---
+log "Nexus: Environment initialized"
+log ".... Hostname: $__HOSTNAME"
+log ".... OS Type:  $__SYSTEM"
+log ".... Main IP:  $__IP ($__IFACE)"
+log ".... MAC:      $__MAC"
+log ".... Master:   {{ node.registrator_server }}:{{ node.registrator_port | default(8000) }}"
+log "Nexus: Tasks"
+

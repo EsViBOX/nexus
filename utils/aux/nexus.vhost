@@ -1,0 +1,50 @@
+# Configuración de Esvibox Nexus - Nginx Sidecar
+server {
+    listen 80;
+    server_name one.esvibox.com; # El nombre de esta máquina manager
+
+    # --- SEGURIDAD: CONFIANZA EN EL PROXY (HAProxy) ---
+    # Permitimos que HAProxy nos diga quién es el cliente real
+    set_real_ip_from  172.19.101.60;      # IP de proxy.esvibox.com
+    set_real_ip_from  proxy.esvibox.com;  # FQDN solicitado
+    real_ip_header    X-Forwarded-For;
+    real_ip_recursive on;
+
+    # Logs optimizados
+    access_log /var/log/nginx/nexus_access.log;
+    error_log /var/log/nginx/nexus_error.log;
+
+    # --- ACELERACIÓN: ARCHIVOS ESTÁTICOS (OFFLOADING) ---
+    # Nginx sirve estos archivos directamente sin pasar por Python
+
+    location /scripts/ {
+        alias /opt/nexus/files/scripts/;
+        expires 1h;
+        add_header Cache-Control "public";
+    }
+
+    location /skels/ {
+        alias /opt/nexus/files/skels/;
+        expires 1h;
+    }
+
+    location /certs/ {
+        alias /opt/nexus/files/certs/;
+        expires 1h;
+        # Solo root debería poder bajar esto, Nginx hereda permisos de la carpeta
+    }
+
+    # --- PROXY INVERSO: LÓGICA DINÁMICA (API) ---
+    # Todo lo que no sea un archivo estático va a Uvicorn
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Ajustes de tiempo para tareas largas
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}

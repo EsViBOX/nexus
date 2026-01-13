@@ -1,0 +1,36 @@
+# --- TASK: 05-AUTH (Authorized Keys) ---
+log ".. task: 05-auth (syncing authorized_keys)"
+
+{% if node.vault_users is defined %}
+{% for username, data in node.vault_users.items() %}
+# Gestión de acceso para: {{ username }}
+USER_HOME=$(getent passwd {{ username }} | cut -d: -f6)
+
+if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
+    log ".... configuring access for {{ username }}"
+
+    # Asegurar directorio y permisos
+    [ ! -d "$USER_HOME/.ssh" ] && mkdir -p "$USER_HOME/.ssh"
+    chmod 700 "$USER_HOME/.ssh"
+
+    # Desplegar la llave pública del Vault
+    # Usamos un archivo temporal para construirlo de forma atómica
+    AUTH_FILE="$USER_HOME/.ssh/authorized_keys"
+
+    {% if data.pub_key is defined %}
+    echo "{{ data.pub_key }}" > "$AUTH_FILE"
+    log ".... public key from vault deployed for {{ username }}"
+    {% else %}
+    log ".... warning: no pub_key found in vault for {{ username }}"
+    {% endif %}
+
+    # Ajustar permisos y propietario
+    chmod 600 "$AUTH_FILE"
+    chown -R {{ username }}:$(id -gn {{ username }}) "$USER_HOME/.ssh"
+else
+    log ".... skipping auth for {{ username }}: home directory not found"
+fi
+{% endfor %}
+{% else %}
+log ".... error: vault_users not defined"
+{% endif %}

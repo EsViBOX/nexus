@@ -1,0 +1,51 @@
+# --- TASK: 07-SKELS (Dotfile Sync) ---
+log ".. task: 07-skels (syncing user environment files)"
+
+{% if node.skel_manifest and node.vault_users %}
+{% for username, data in node.vault_users.items() %}
+# --- Procesando entorno para: {{ username }} ---
+USER_HOME=$(getent passwd {{ username }} | cut -d: -f6)
+
+if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
+    {% for skel in node.skel_manifest %}
+    # Archivo: {{ skel.dest_name }}
+    TARGET_FILE="$USER_HOME/{{ skel.dest_name }}"
+
+    {% if skel.remove %}
+    if [ -f "$TARGET_FILE" ]; then
+        rm -f "$TARGET_FILE"
+        log ".... {{ username }}: removed {{ skel.dest_name }}"
+    fi
+    {% else %}
+    NEED_DOWNLOAD=false
+    {% if skel.override %}
+    NEED_DOWNLOAD=true
+    log ".... {{ username }}: override enabled for {{ skel.dest_name }}"
+    {% else %}
+    if [ ! -f "$TARGET_FILE" ]; then
+        NEED_DOWNLOAD=true
+    else
+        CURRENT_HASH=$(md5sum "$TARGET_FILE" | awk '{print $1}')
+        [ "$CURRENT_HASH" != "{{ skel.hash }}" ] && NEED_DOWNLOAD=true
+    fi
+    {% endif %}
+
+    if [ "$NEED_DOWNLOAD" = true ]; then
+        curl -s -H "X-Nexus-Key: $__NEXUS_KEY" -o "$TARGET_FILE" "http://$__NEXUS_ENDPOINT/skels/{{ skel.src_name }}"
+        if [ $? -eq 0 ]; then
+            chown {{ username }}:$(id -gn {{ username }}) "$TARGET_FILE"
+            chmod 644 "$TARGET_FILE"
+            log ".... {{ username }}: deployed {{ skel.dest_name }}"
+        else
+            log ".... ERROR: {{ username }}: failed to download {{ skel.dest_name }}"
+        fi
+    fi
+    {% endif %}
+    {% endfor %}
+else
+    log ".... skipping {{ username }}: home directory not found"
+fi
+{% endfor %}
+{% else %}
+log ".... skipping: no skels or users defined"
+{% endif %}

@@ -1,0 +1,21 @@
+# --- NEXUS FOOTER (TELEMETRY) ---
+log "Final telemetry report"
+
+# Construcción de JSON usando las variables exportadas en el Header
+JSON_DATA=$(python3 -c "import json, sys; print(json.dumps({
+    'hostname': '$__HOSTNAME',
+    'machine_id': '$__NEXUS_MACHINE_ID',
+    'fingerprint': '$__NEXUS_FINGERPRINT',
+    'ip': '$__IP',
+    'mac': '$__MAC',
+    'vpn': '{{ node.vpn_ip | default('NULL') }}',
+    'log': open('$LOG').read()
+}))")
+
+OUT=$(curl -s -X POST \
+     -H "Content-Type: application/json" \
+     -H "X-Nexus-Key: $__NEXUS_KEY" \
+     -d "$JSON_DATA" http://$__NEXUS_ENDPOINT/record)
+
+log "--- NEXUS FINISHED: $(date) ---"
+exit 0

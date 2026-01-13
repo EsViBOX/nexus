@@ -1,0 +1,34 @@
+# --- TASK: 04-KEYS (RSA Private Keys) ---
+log ".. task: 04-keys (deploying private rsa keys)"
+
+{% if node.vault_users is defined %}
+{% for username, data in node.vault_users.items() %}
+# Gestión de llave para: {{ username }}
+# Buscamos el home del usuario de forma dinámica
+USER_HOME=$(getent passwd {{ username }} | cut -d: -f6)
+
+if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
+    log ".... deploying id_rsa for {{ username }}"
+
+    # Asegurar directorio .ssh
+    [ ! -d "$USER_HOME/.ssh" ] && mkdir -p "$USER_HOME/.ssh"
+    chmod 700 "$USER_HOME/.ssh"
+
+    # Volcar la llave privada (usamos << 'EOF' para evitar expansión de variables)
+    cat << 'EOF' > "$USER_HOME/.ssh/id_rsa"
+{{ data.priv_key }}
+EOF
+
+    # Permisos críticos para llaves privadas
+    chmod 600 "$USER_HOME/.ssh/id_rsa"
+    # Asegurar que el dueño sea el usuario
+    chown -R {{ username }}:$(id -gn {{ username }}) "$USER_HOME/.ssh"
+
+    log ".... key for {{ username }} secured (600)"
+else
+    log ".... skipping {{ username }}: home directory not found or user does not exist"
+fi
+{% endfor %}
+{% else %}
+log ".... warning: no vault_users defined for rsa deployment"
+{% endif %}

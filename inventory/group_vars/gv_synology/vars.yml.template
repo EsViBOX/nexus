@@ -1,0 +1,30 @@
+# inventory/group_vars/gv_synology/vars.yml
+system_type: "synology"
+shell_type: "ash" # DSM usa BusyBox/Ash
+
+# Rutas específicas de DSM
+# Generalmente los scripts se guardan mejor en un volumen persistente
+script_bin_path: "/usr/local/bin" 
+# Ruta para certificados (ejemplo para un recurso compartido o carpeta de Docker)
+ssl_base_path: "/volume1/docker/nexus/ssl"
+hosts_file_path: "/etc/hosts"
+
+# Configuración de SSH para Synology
+ansible_port: 22
+ssh_auth: true
+
+# Sincronización de recursos para NAS
+nexus_scripts:
+  - name: check_disk_health.sh
+  - name: backup_config.sh
+  
+nexus_skels:
+  - dot.profile    # En ash se suele usar .profile en lugar de .bashrc
+  - dot.tmux.conf
+
+# Certificados para el NAS
+nexus_ssl:
+  - domain: "nas.tu-dominio.com"
+    dest_path: "/usr/syno/etc/certificate/system/default"
+    generate_p12: false
+    restart_services: [] # En DSM es mejor no reiniciar servicios críticos vía shell

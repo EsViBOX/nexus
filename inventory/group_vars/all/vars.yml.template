@@ -1,0 +1,17 @@
+# inventory/group_vars/all/vars.yml
+
+# Configuración del Manager (Red)
+registrator_server: "nexus.tu-dominio.com"
+registrator_port: 80
+domain: "tu-dominio.com"
+registrator_ip: "192.168.1.5" # IP real del manager para /etc/hosts
+
+# Frecuencia de "Llamada a casa"
+nexus_timer_interval: "30min"
+nexus_cron_schedule: "*/30 * * * *"
+
+# Rutas globales por defecto
+sshd_config_path: "/etc/ssh/sshd_config"
+hosts_file_path: "/etc/hosts"
+script_bin_path: "/usr/local/sbin"
+ssl_base_path: "/etc/ssl/nexus"

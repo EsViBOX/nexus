@@ -1,0 +1,23 @@
+# inventory/group_vars/gv_debian/vars.yml
+system_type: "debian"
+ansible_port: 2222
+ssh_auth: true
+
+# Scripts de utilidad (Tarea 06)
+nexus_scripts:
+  - cleanmem.sh
+  - check-crt.sh
+  - name: script-antiguo.sh
+    remove: true
+
+# Dotfiles de usuario (Tarea 07)
+nexus_skels:
+  - dot.bashrc
+  - dot.tmux.conf
+
+# Certificados SSL (Tarea 08)
+nexus_ssl:
+  - domain: "servicios.com"
+    dest_path: "/etc/ssl/servicios"
+    generate_combined: true
+    restart_services: ["nginx"]

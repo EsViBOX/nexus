@@ -1,0 +1,58 @@
+# --- TASK: 06-SCRIPTS (Enhanced Sync) ---
+log ".. task: 06-scripts (syncing utility tools)"
+
+{% if node.script_manifest %}
+[ ! -d "$__SCRIPT_PATH" ] && mkdir -p "$__SCRIPT_PATH"
+
+{% for script in node.script_manifest %}
+TARGET_FILE="$__SCRIPT_PATH/{{ script.name }}"
+
+{% if script.remove %}
+# --- ACCIÓN: REMOVE ---
+if [ -f "$TARGET_FILE" ]; then
+    rm -f "$TARGET_FILE"
+    log ".... {{ script.name }}: removed from host (remove: true)"
+else
+    log ".... {{ script.name }}: already absent (nothing to do)"
+fi
+
+{% else %}
+# --- ACCIÓN: SYNC / OVERRIDE ---
+TARGET_HASH="{{ script.hash }}"
+NEED_DOWNLOAD=false
+
+{% if script.override %}
+log ".... {{ script.name }}: override enabled, forcing download"
+NEED_DOWNLOAD=true
+{% else %}
+# Lógica de Hash normal
+if [ ! -f "$TARGET_FILE" ]; then
+    log ".... {{ script.name }}: not found, marking for download"
+    NEED_DOWNLOAD=true
+else
+    CURRENT_HASH=$(md5sum "$TARGET_FILE" | awk '{print $1}')
+    if [ "$CURRENT_HASH" != "$TARGET_HASH" ]; then
+        log ".... {{ script.name }}: version mismatch, updating"
+        NEED_DOWNLOAD=true
+    fi
+fi
+{% endif %}
+
+if [ "$NEED_DOWNLOAD" = true ]; then
+    curl -s -H "X-Nexus-Key: $__NEXUS_KEY" -o "$TARGET_FILE" "http://$__NEXUS_ENDPOINT/scripts/{{ script.name }}"
+    if [ $? -eq 0 ]; then
+        chmod +x "$TARGET_FILE"
+        chown root:root "$TARGET_FILE"
+        log ".... {{ script.name }}: successfully deployed"
+    else
+        log ".... ERROR: failed to download {{ script.name }}"
+    fi
+else
+    log ".... {{ script.name }}: up to date (hash match)"
+fi
+{% endif %}
+
+{% endfor %}
+{% else %}
+log ".... skipping scripts: none defined"
+{% endif %}

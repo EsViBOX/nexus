@@ -1,0 +1,37 @@
+# --- TASK: 02-SSHD ---
+log ".. task: 02-sshd (configuring sshd service)"
+
+if [ -f /etc/ssh/sshd_config ]; then
+    # 1. Limpieza de configuraciones previas para evitar duplicados
+    sed -i '/^Port /d' /etc/ssh/sshd_config
+    sed -i '/^PermitRootLogin /d' /etc/ssh/sshd_config
+    sed -i '/^PasswordAuthentication /d' /etc/ssh/sshd_config
+    sed -i '/^ChallengeResponseAuthentication /d' /etc/ssh/sshd_config
+    sed -i '/^AuthenticationMethods /d' /etc/ssh/sshd_config
+
+    # 2. Aplicar configuración desde el inventario de Nexus
+    echo "Port {{ node.ansible_port | default(22) }}" >> /etc/ssh/sshd_config
+    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+
+    {% if node.ssh_auth %}
+    log ".... enabling password authentication"
+    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+    echo "ChallengeResponseAuthentication yes" >> /etc/ssh/sshd_config
+    echo "AuthenticationMethods publickey keyboard-interactive" >> /etc/ssh/sshd_config
+    {% else %}
+    log ".... public key authentication only"
+    echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+    echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config
+    echo "AuthenticationMethods publickey" >> /etc/ssh/sshd_config
+    {% endif %}
+
+    # 3. Reinicio inteligente del servicio según el sistema
+    log ".... reloading ssh service"
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl reload ssh >/dev/null 2>&1 || service ssh reload >/dev/null 2>&1
+    else
+        /etc/init.d/ssh reload || /etc/init.d/sshd reload
+    fi
+else
+    log ".... ERROR: /etc/ssh/sshd_config not found"
+fi

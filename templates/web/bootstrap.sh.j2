@@ -1,0 +1,50 @@
+#!/bin/sh
+# Esvibox NEXUS - Bootstrap v2.2.1 (Debug Mode)
+
+HOSTNAME="$1"
+API_KEY="$2"
+
+if [ -z "$HOSTNAME" ] || [ -z "$API_KEY" ]; then
+    echo "Usage: curl ... | bash -s -- <name> <api_key>"
+    exit 1
+fi
+
+MANAGER_URL="{{ server_url }}"
+
+# 1. Generar Identidad
+M_ID=$(cat /etc/machine-id 2>/dev/null || echo "unknown")
+HW_RAW="${M_ID}$(ip link show | grep ether | awk '{print $2}' | sort | tr -d '\n')"
+F_PRINT=$(echo "$HW_RAW" | sha256sum | awk '{print $1}')
+
+echo "Nexus: [First Contact] Identity: $M_ID"
+
+# 2. Probar Registro (Capturando el código HTTP)
+echo "Nexus: Registering at manager..."
+HTTP_RECORD=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+     -H "Content-Type: application/json" \
+     -H "X-Nexus-Key: $API_KEY" \
+     -d "{\"hostname\": \"$HOSTNAME\", \"machine_id\": \"$M_ID\", \"fingerprint\": \"$F_PRINT\", \"log\": \"Initial Bootstrap\"}" \
+     "$MANAGER_URL/record")
+
+if [ "$HTTP_RECORD" != "200" ]; then
+    echo "ERROR: Registration failed with HTTP $HTTP_RECORD (Check your API Key)"
+    exit 1
+fi
+
+# 3. Pedir Tarea
+echo "Nexus: Requesting task..."
+URL="$MANAGER_URL/get-task/$HOSTNAME?machine_id=$M_ID&fingerprint=$F_PRINT"
+TMP_SCRIPT="/tmp/nexus_run.sh"
+
+HTTP_TASK=$(curl -s -o "$TMP_SCRIPT" -w "%{http_code}" -H "X-Nexus-Key: $API_KEY" "$URL")
+
+if [ "$HTTP_TASK" = "200" ]; then
+    echo "Nexus: Success. Executing..."
+    bash "$TMP_SCRIPT"
+    rm -f "$TMP_SCRIPT"
+else
+    echo "ERROR: Task request failed with HTTP $HTTP_TASK"
+    [ -f "$TMP_SCRIPT" ] && cat "$TMP_SCRIPT"
+    exit 1
+fi
+
